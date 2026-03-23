@@ -301,14 +301,14 @@ app.post("/api/rag/search", (req, res) => {
 });
 
 // 删除文件索引
-app.delete("/api/rag/file", (req, res) => {
+app.delete("/api/rag/file", async (req, res) => {
   try {
     const { filePath } = req.body;
     if (!filePath) {
       return res.status(400).json({ error: "请提供文件路径" });
     }
 
-    const success = rag.removeFileIndex(filePath);
+    const success = await rag.removeFileIndex(filePath);
     res.json({ success });
   } catch (error: any) {
     console.error("[RAG] Delete error:", error);
@@ -317,9 +317,9 @@ app.delete("/api/rag/file", (req, res) => {
 });
 
 // 获取索引统计
-app.get("/api/rag/stats", (req, res) => {
+app.get("/api/rag/stats", async (req, res) => {
   try {
-    const stats = rag.getIndexStats();
+    const stats = await rag.getIndexStats();
     res.json(stats);
   } catch (error: any) {
     console.error("[RAG] Stats error:", error);
@@ -344,6 +344,32 @@ app.get("/api/rag/file-content", (req, res) => {
   } catch (error: any) {
     console.error("[RAG] File content error:", error);
     res.status(500).json({ error: error?.message || "获取文件内容失败" });
+  }
+});
+
+// 检查 Chroma 服务器状态
+app.get("/api/rag/chroma-status", async (req, res) => {
+  try {
+    const status = await rag.checkChromaStatus();
+    res.json(status);
+  } catch (error: any) {
+    console.error("[RAG] Chroma status error:", error);
+    res.status(500).json({ 
+      available: false, 
+      message: error?.message || "检查 Chroma 状态失败",
+      host: process.env.CHROMA_HOST || 'http://localhost:8000'
+    });
+  }
+});
+
+// 重置知识库（危险操作）
+app.post("/api/rag/reset", async (req, res) => {
+  try {
+    await rag.resetCollection();
+    res.json({ success: true, message: "知识库已重置" });
+  } catch (error: any) {
+    console.error("[RAG] Reset error:", error);
+    res.status(500).json({ error: error?.message || "重置知识库失败" });
   }
 });
 
@@ -449,7 +475,7 @@ app.post("/api/chat", async (req, res) => {
   const defaultSystemPrompt = "你是一个专业的AI知识库助手，善于基于知识库内容回答用户的问题。请用简洁清晰的方式回答问题。如果知识库中有相关内容，请优先基于知识库内容回答。";
   
   // 构建 RAG 上下文
-  const ragContext = rag.buildRAGContext(message, 5);
+  const ragContext = await rag.buildRAGContext(message, 5);
   
   // 合并系统提示词和 RAG 上下文
   let finalSystemPrompt = systemPrompt || defaultSystemPrompt;
@@ -691,7 +717,11 @@ app.listen(PORT, () => {
 ║     ◉ API 服务器已启动                      ║
 ║                                            ║
 ║     地址: http://localhost:${PORT}            ║
-║     数据库: SQLite (data/chat.db)          ║
+║     会话数据库: SQLite (data/chat.db)      ║
+║     向量数据库: Chroma (localhost:8000)    ║
+║                                            ║
+║     提示: 请先启动 Chroma 服务器            ║
+║           npm run chroma                   ║
 ║                                            ║
 ╚════════════════════════════════════════════╝
   `);
